@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
     std::cout << "<templatejs> is the template file for the output in javascript format, which should have a ${SDF} string somewhere in it, where the data is printed.\n\n";
     std::cout << "\t<dx> specifies the length of grid cell in the resulting distance field.\n";
     std::cout << "\t<padding> specifies the number of cells worth of padding between the object bound box and the boundary of the distance field grid. Minimum is 1.\n\n";
-    
+
     exit(-1);
   }
 
@@ -51,16 +51,16 @@ int main(int argc, char* argv[]) {
   std::stringstream arg2(argv[3]);
   float dx;
   arg2 >> dx;
-  
+
   std::stringstream arg3(argv[4]);
   int padding;
   arg3 >> padding;
 
   if(padding < 1) padding = 1;
   //start with a massive inside out bound box.
-  Vec3f min_box(std::numeric_limits<float>::max(),std::numeric_limits<float>::max(),std::numeric_limits<float>::max()), 
+  Vec3f min_box(std::numeric_limits<float>::max(),std::numeric_limits<float>::max(),std::numeric_limits<float>::max()),
     max_box(-std::numeric_limits<float>::max(),-std::numeric_limits<float>::max(),-std::numeric_limits<float>::max());
-  
+
   std::cout << "Reading data.\n";
 
   std::ifstream infile(argv[1]);
@@ -120,14 +120,14 @@ int main(int argc, char* argv[]) {
   min_box -= padding*dx*unit;
   max_box += padding*dx*unit;
   Vec3ui sizes = Vec3ui((max_box - min_box)/dx);
-  
+
   std::cout << "Bound box size: (" << min_box << ") to (" << max_box << ") with dimensions " << sizes << "." << std::endl;
 
   std::cout << "Computing signed distance field.\n";
   Array3f phi_grid;
   make_level_set3(faceList, vertList, min_box, dx, sizes[0], sizes[1], sizes[2], phi_grid);
 
-  // Write SDF results in JS form:
+  std::cout << "- writing SDF results in JS form" << std::endl;
   float edge_x = phi_grid.ni * dx;
   float edge_y = phi_grid.nj * dx;
   float edge_z = phi_grid.nk * dx;
@@ -146,7 +146,6 @@ int main(int argc, char* argv[]) {
   std::ifstream t(jstemplate.c_str());
   std::string template_js((std::istreambuf_iterator<char>(t)),
                   std::istreambuf_iterator<char>());
-  std::cout << template_js << std::endl;
   std::string generated_js = replace_all(template_js, "${SDF}", sdf_js.str());
 
     // Very hackily strip off file suffix.

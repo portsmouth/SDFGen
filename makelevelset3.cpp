@@ -124,10 +124,18 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
    Array3i closest_tri(ni, nj, nk, -1);
    Array3i intersection_count(ni, nj, nk, 0); // intersection_count(i,j,k) is # of tri intersections in (i-1,i]x{j}x{k}
 
-   // we begin by initializing distances near the mesh, and figuring out intersection counts
+   std::cout << "- initializing distances near the mesh, and figuring out intersection counts" << std::endl;
    Vec3f ijkmin, ijkmax;
+   int percent_done = 0;
    for(unsigned int t=0; t<tri.size(); ++t)
    {
+      int curr_percent_done = (int) 100.0*float(t)/float(tri.size()-1);
+      if (curr_percent_done > percent_done)
+      {
+         std::cout << "\t\t %" <<  curr_percent_done << " done" << std::endl;
+         percent_done = curr_percent_done;
+      }
+
       unsigned int p, q, r; assign(tri[t], p, q, r);
 
       // coordinates in grid to high precision
@@ -163,19 +171,31 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
          }
       }
    }
-   // and now we fill in the rest of the distances with fast sweeping
+
+   std::cout << "- fill in the rest of the distances with fast sweeping" << std::endl;
    for(unsigned int pass=0; pass<2; ++pass){
-      sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, +1);
-      sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, -1);
-      sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, -1);
-      sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, +1);
-      sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, +1);
-      sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, -1);
-      sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, -1);
-      sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, +1);
+      std::cout << "pass " << pass << std::endl;
+      std::cout << "\tsweep +1, +1, +1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, +1);
+      std::cout << "\tsweep -1, -1, -1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, -1);
+      std::cout << "\tsweep +1, +1, -1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, +1, +1, -1);
+      std::cout << "\tsweep -1, -1, +1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, -1, -1, +1);
+      std::cout << "\tsweep +1, -1, +1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, +1);
+      std::cout << "\tsweep -1, +1, -1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, -1);
+      std::cout << "\tsweep +1, -1, -1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, +1, -1, -1);
+      std::cout << "\tsweep -1, +1, +1" << std::endl; sweep(tri, x, phi, closest_tri, origin, dx, -1, +1, +1);
    }
-   // then figure out signs (inside/outside) from intersection counts
-   for(int k=0; k<nk; ++k) for(int j=0; j<nj; ++j){
+
+   std::cout << "- then figure out signs (inside/outside) from intersection counts" << std::endl;
+   percent_done = 0;
+   for(int k=0; k<nk; ++k) {
+
+      int curr_percent_done = (int) 100.0*float(k)/float(nk-1);
+      if (curr_percent_done > percent_done)
+      {
+         std::cout << "\t\t %" <<  curr_percent_done << " done" << std::endl;
+         percent_done = curr_percent_done;
+      }
+      for(int j=0; j<nj; ++j){
       int total_count=0;
       for(int i=0; i<ni; ++i){
          total_count+=intersection_count(i,j,k);
@@ -183,6 +203,6 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
             phi(i,j,k)=-phi(i,j,k); // we are inside the mesh
          }
       }
-   }
+   }}
 }
 
