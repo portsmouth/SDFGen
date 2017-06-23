@@ -4,42 +4,36 @@
 //This code is public domain. Feel free to mess with it, let me know if you like it.
 
 #include "makelevelset3.h"
-#include "config.h"
 
-#ifdef HAVE_VTK
-  #include <vtkImageData.h>
-  #include <vtkFloatArray.h>
-  #include <vtkXMLImageDataWriter.h>
-  #include <vtkPointData.h>
-  #include <vtkSmartPointer.h>
-#endif
-
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <limits>
 
+std::string replace_all(std::string str, const std::string &remove, const std::string &insert)
+{
+  std::string::size_type pos = 0;
+  while ((pos = str.find(remove, pos)) != std::string::npos)
+  {
+    str.replace(pos, remove.size(), insert);
+    pos++;
+  }
+
+  return str;
+}
+
 int main(int argc, char* argv[]) {
   
-  if(argc != 4) {
+  if(argc != 5) {
     std::cout << "SDFGen - A utility for converting closed oriented triangle meshes into grid-based signed distance fields.\n";
-    std::cout << "\nThe output file format is:";
-    std::cout << "<ni> <nj> <nk>\n";
-    std::cout << "<origin_x> <origin_y> <origin_z>\n";
-    std::cout << "<dx>\n";
-    std::cout << "<value_1> <value_2> <value_3> [...]\n\n";
-    
-    std::cout << "(ni,nj,nk) are the integer dimensions of the resulting distance field.\n";
-    std::cout << "(origin_x,origin_y,origin_z) is the 3D position of the grid origin.\n";
-    std::cout << "<dx> is the grid spacing.\n\n";
-    std::cout << "<value_n> are the signed distance data values, in ascending order of i, then j, then k.\n";
 
-    std::cout << "The output filename will match that of the input, with the OBJ suffix replaced with SDF.\n\n";
-
-    std::cout << "Usage: SDFGen <filename> <dx> <padding>\n\n";
+    std::cout << "Usage: SDFGen <filename> <templatejs> <dx> <padding>\n\n";
     std::cout << "Where:\n";
     std::cout << "\t<filename> specifies a Wavefront OBJ (text) file representing a *triangle* mesh (no quad or poly meshes allowed). File must use the suffix \".obj\".\n";
+    std::cout << "<templatejs> is the template file for the output in javascript format, which should have a ${SDF} string somewhere in it, where the data is printed.\n\n";
     std::cout << "\t<dx> specifies the length of grid cell in the resulting distance field.\n";
     std::cout << "\t<padding> specifies the number of cells worth of padding between the object bound box and the boundary of the distance field grid. Minimum is 1.\n\n";
     
@@ -52,11 +46,13 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  std::stringstream arg2(argv[2]);
+  std::string jstemplate(argv[2]);
+
+  std::stringstream arg2(argv[3]);
   float dx;
   arg2 >> dx;
   
-  std::stringstream arg3(argv[3]);
+  std::stringstream arg3(argv[4]);
   int padding;
   arg3 >> padding;
 
@@ -73,41 +69,49 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  int ignored_lines = 0;
-  std::string line;
-  std::vector<Vec3f> vertList;
-  std::vector<Vec3ui> faceList;
-  while(!infile.eof()) {
-    std::getline(infile, line);
+    std::vector<Vec3f> vertList;
+    std::vector<Vec3ui> faceList;
 
-    //.obj files sometimes contain vertex normals indicated by "vn"
-    if(line.substr(0,1) == std::string("v") && line.substr(0,2) != std::string("vn")){
-      std::stringstream data(line);
-      char c;
-      Vec3f point;
-      data >> c >> point[0] >> point[1] >> point[2];
-      vertList.push_back(point);
-      update_minmax(point, min_box, max_box);
+    /*******************************************************/
+
+    std::string inputfile = argv[1];
+    std::cout << "Loading " << inputfile << std::endl;
+
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+
+    std::string err;
+    bool triangulate = true;
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, inputfile.c_str(),
+                                NULL, triangulate);
+
+    size_t numVertices = attrib.vertices.size()/3;
+    for (size_t vi=0; vi<numVertices; vi++)
+    {
+        Vec3f point;
+        point[0] = attrib.vertices[3*vi];
+        point[1] = attrib.vertices[3*vi+1];
+        point[2] = attrib.vertices[3*vi+2];
+        vertList.push_back(point);
+        update_minmax(point, min_box, max_box);
     }
-    else if(line.substr(0,1) == std::string("f")) {
-      std::stringstream data(line);
-      char c;
-      int v0,v1,v2;
-      data >> c >> v0 >> v1 >> v2;
-      faceList.push_back(Vec3ui(v0-1,v1-1,v2-1));
+    for (size_t i = 0; i < shapes.size(); i++)
+    {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[i].mesh.num_face_vertices.size(); f++) {
+            size_t fnum = shapes[i].mesh.num_face_vertices[f];
+            for (size_t v = 2; v < fnum; v++) {
+                tinyobj::index_t idxA = shapes[i].mesh.indices[index_offset + v];
+                tinyobj::index_t idxB = shapes[i].mesh.indices[index_offset + v - 1];
+                tinyobj::index_t idxC = shapes[i].mesh.indices[index_offset + v - 2];
+                faceList.push_back(Vec3ui(idxA.vertex_index, idxB.vertex_index, idxC.vertex_index));
+            }
+            index_offset += fnum;
+        }
     }
-    else if( line.substr(0,2) == std::string("vn") ){
-      std::cerr << "Obj-loader is not able to parse vertex normals, please strip them from the input file. \n";
-      exit(-2); 
-    }
-    else {
-      ++ignored_lines; 
-    }
-  }
-  infile.close();
-  
-  if(ignored_lines > 0)
-    std::cout << "Warning: " << ignored_lines << " lines were ignored since they did not contain faces or vertices.\n";
+
+    /*******************************************************/
 
   std::cout << "Read in " << vertList.size() << " vertices and " << faceList.size() << " faces." << std::endl;
 
@@ -123,56 +127,34 @@ int main(int argc, char* argv[]) {
   Array3f phi_grid;
   make_level_set3(faceList, vertList, min_box, dx, sizes[0], sizes[1], sizes[2], phi_grid);
 
-  std::string outname;
+  // Write SDF results in JS form:
+  float edge_x = phi_grid.ni * dx;
+  float edge_y = phi_grid.nj * dx;
+  float edge_z = phi_grid.nk * dx;
 
-  #ifdef HAVE_VTK
-    // If compiled with VTK, we can directly output a volumetric image format instead
-    //Very hackily strip off file suffix.
-    outname = filename.substr(0, filename.size()-4) + std::string(".vti");
+  std::stringstream sdf_js;
+  sdf_js << "\tlet asset = {" << std::endl;
+  sdf_js << "\t\t metadata: { ORIG: [" <<  min_box[0] << ", " << min_box[1] << ", " << min_box[2] << "]," << std::endl;
+  sdf_js << "\t\t             EDGE: [" <<  edge_x << ", " << edge_y << ", " << edge_z << "]," << std::endl;
+  sdf_js << "\t\t             GRES: [" <<  phi_grid.ni << ", " << phi_grid.nj << ", " << phi_grid.nk << "] }," << std::endl;
+  sdf_js << "\t\t data: new Float32Array( [ ";
+  for(unsigned int i = 0; i < phi_grid.a.size(); ++i) { if (i>0) sdf_js << ", "; sdf_js << phi_grid.a[i]; }
+  sdf_js << "\t\t ] )" << std::endl;
+  sdf_js << "\t};" << std::endl;
+
+  // template file for javascript generator
+  std::ifstream t(jstemplate.c_str());
+  std::string template_js((std::istreambuf_iterator<char>(t)),
+                  std::istreambuf_iterator<char>());
+  std::cout << template_js << std::endl;
+  std::string generated_js = replace_all(template_js, "${SDF}", sdf_js.str());
+
+    // Very hackily strip off file suffix.
+    std::string outname;
+    outname = filename.substr(0, filename.size()-4) + std::string(".html");
     std::cout << "Writing results to: " << outname << "\n";
-    vtkSmartPointer<vtkImageData> output_volume = vtkSmartPointer<vtkImageData>::New();
-
-    output_volume->SetDimensions(phi_grid.ni ,phi_grid.nj ,phi_grid.nk);
-    output_volume->SetOrigin( phi_grid.ni*dx/2, phi_grid.nj*dx/2,phi_grid.nk*dx/2);
-    output_volume->SetSpacing(dx,dx,dx);
-
-    vtkSmartPointer<vtkFloatArray> distance = vtkSmartPointer<vtkFloatArray>::New();
-    
-    distance->SetNumberOfTuples(phi_grid.a.size());
-    
-    output_volume->GetPointData()->AddArray(distance);
-    distance->SetName("Distance");
-
-    for(unsigned int i = 0; i < phi_grid.a.size(); ++i) {
-      distance->SetValue(i, phi_grid.a[i]);
-    }
-
-    vtkSmartPointer<vtkXMLImageDataWriter> writer =
-    vtkSmartPointer<vtkXMLImageDataWriter>::New();
-    writer->SetFileName(outname.c_str());
-
-    #if VTK_MAJOR_VERSION <= 5
-      writer->SetInput(output_volume);
-    #else
-      writer->SetInputData(output_volume);
-    #endif
-    writer->Write();
-
-  #else
-    // if VTK support is missing, default back to the original ascii file-dump.
-    //Very hackily strip off file suffix.
-    outname = filename.substr(0, filename.size()-4) + std::string(".sdf");
-    std::cout << "Writing results to: " << outname << "\n";
-    
     std::ofstream outfile( outname.c_str());
-    outfile << phi_grid.ni << " " << phi_grid.nj << " " << phi_grid.nk << std::endl;
-    outfile << min_box[0] << " " << min_box[1] << " " << min_box[2] << std::endl;
-    outfile << dx << std::endl;
-    for(unsigned int i = 0; i < phi_grid.a.size(); ++i) {
-      outfile << phi_grid.a[i] << std::endl;
-    }
-    outfile.close();
-  #endif
+    outfile << generated_js << std::endl;
 
   std::cout << "Processing complete.\n";
 

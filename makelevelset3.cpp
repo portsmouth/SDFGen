@@ -123,19 +123,23 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
    phi.assign((ni+nj+nk)*dx); // upper bound on distance
    Array3i closest_tri(ni, nj, nk, -1);
    Array3i intersection_count(ni, nj, nk, 0); // intersection_count(i,j,k) is # of tri intersections in (i-1,i]x{j}x{k}
+
    // we begin by initializing distances near the mesh, and figuring out intersection counts
    Vec3f ijkmin, ijkmax;
-   for(unsigned int t=0; t<tri.size(); ++t){
-     unsigned int p, q, r; assign(tri[t], p, q, r);
-     // coordinates in grid to high precision
+   for(unsigned int t=0; t<tri.size(); ++t)
+   {
+      unsigned int p, q, r; assign(tri[t], p, q, r);
+
+      // coordinates in grid to high precision
       double fip=((double)x[p][0]-origin[0])/dx, fjp=((double)x[p][1]-origin[1])/dx, fkp=((double)x[p][2]-origin[2])/dx;
       double fiq=((double)x[q][0]-origin[0])/dx, fjq=((double)x[q][1]-origin[1])/dx, fkq=((double)x[q][2]-origin[2])/dx;
       double fir=((double)x[r][0]-origin[0])/dx, fjr=((double)x[r][1]-origin[1])/dx, fkr=((double)x[r][2]-origin[2])/dx;
+
       // do distances nearby
       int i0=clamp(int(min(fip,fiq,fir))-exact_band, 0, ni-1), i1=clamp(int(max(fip,fiq,fir))+exact_band+1, 0, ni-1);
       int j0=clamp(int(min(fjp,fjq,fjr))-exact_band, 0, nj-1), j1=clamp(int(max(fjp,fjq,fjr))+exact_band+1, 0, nj-1);
       int k0=clamp(int(min(fkp,fkq,fkr))-exact_band, 0, nk-1), k1=clamp(int(max(fkp,fkq,fkr))+exact_band+1, 0, nk-1);
-      for(int k=k0; k<=k1; ++k) for(int j=j0; j<=j1; ++j) for(int i=i0; i<=i1; ++i){
+      for(int k=k0; k<=k1; ++k) for(int j=j0; j<=j1; ++j) for(int i=i0; i<=i1; ++i) {
          Vec3f gx(i*dx+origin[0], j*dx+origin[1], k*dx+origin[2]);
          float d=point_triangle_distance(gx, x[p], x[q], x[r]);
          if(d<phi(i,j,k)){
