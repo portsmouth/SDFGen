@@ -132,7 +132,7 @@ void make_level_set3(const std::vector<Vec3ui> &tri, const std::vector<Vec3f> &x
       int curr_percent_done = (int) 100.0*float(t)/float(tri.size()-1);
       if (curr_percent_done > percent_done)
       {
-         std::cout << "\t\t %" <<  curr_percent_done << " done" << std::endl;
+         std::cout << "\t\t" <<  curr_percent_done << "% done" << std::endl;
          percent_done = curr_percent_done;
       }
 
